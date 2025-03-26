@@ -3,13 +3,18 @@
 #include <tbb/tbb.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <core/util/include/util.hpp>
+#include <cstddef>
 #include <iterator>
 #include <random>
 #include <span>
 #include <vector>
 
+#include "oneapi/tbb/blocked_range.h"
+#include "oneapi/tbb/enumerable_thread_specific.h"
+#include "oneapi/tbb/parallel_for.h"
 #include "oneapi/tbb/task_arena.h"
 #include "oneapi/tbb/task_group.h"
 
@@ -22,8 +27,9 @@ int TestTaskTBB::GetRandomIndex(int low, int high) {
 }
 
 void TestTaskTBB::QuickSort(std::vector<int>::iterator low, std::vector<int>::iterator high, int depth) {
-  int n = std::distance(low, high);
-  if (n <= 1) return;
+  if (std::distance(low, high) <= 1) {
+    return;
+  }
 
   int random_index = GetRandomIndex(0, n - 1);
   int pivot = *(low + random_index);
@@ -52,7 +58,9 @@ bool TestTaskTBB::InPlaceMerge(const BlockRange& a, const BlockRange& b, std::ve
   std::span<int> span_a{a.low, static_cast<size_t>(len_a)};
   std::span<int> span_b{b.low, static_cast<size_t>(len_b)};
 
-  size_t i = 0, j = 0, k = 0;
+  size_t i = 0;
+  size_t j = 0;
+  size_t k = 0;
 
   while (i < span_a.size() && j < span_b.size()) {
     if (span_a[i] <= span_b[j]) {
@@ -62,7 +70,9 @@ bool TestTaskTBB::InPlaceMerge(const BlockRange& a, const BlockRange& b, std::ve
       buffer[k++] = span_b[j++];
     }
   }
-  while (i < span_a.size()) buffer[k++] = span_a[i++];
+  while (i < span_a.size()) {
+    buffer[k++] = span_a[i++];
+  }
   while (j < span_b.size()) {
     changed = true;
     buffer[k++] = span_b[j++];
@@ -140,8 +150,9 @@ bool TestTaskTBB::ValidationImpl() {
 
 bool TestTaskTBB::RunImpl() {
   int n = static_cast<int>(input_.size());
-  if (n <= 1) return true;
-
+  if (n <= 1) {
+    return true;
+  }
   int num_threads = tbb::this_task_arena::max_concurrency();
   int p = std::max(num_threads / 2, 1);
   auto blocks = PartitionBlocks(input_, p);

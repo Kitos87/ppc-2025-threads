@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "core/task/include/task.hpp"
-#include "core/util/include/util.hpp"
 #include "tbb/korovin_n_qsort_batcher/include/ops_tbb.hpp"
 
 namespace {
