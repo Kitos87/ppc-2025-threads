@@ -31,6 +31,7 @@ void TestTaskTBB::QuickSort(std::vector<int>::iterator low, std::vector<int>::it
     return;
   }
 
+  int n = static_cast<int>(std::distance(low, high));
   int random_index = GetRandomIndex(0, n - 1);
   int pivot = *(low + random_index);
 
