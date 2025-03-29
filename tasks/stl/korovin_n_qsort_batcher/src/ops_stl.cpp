@@ -79,8 +79,10 @@ bool TestTaskSTL::InPlaceMerge(const BlockRange& a, const BlockRange& b, std::ve
 std::vector<BlockRange> TestTaskSTL::PartitionBlocks(std::vector<int>& arr, int p) {
   std::vector<BlockRange> blocks;
   blocks.reserve(p);
-  int chunk_size = arr.size() / p;
-  int remainder = arr.size() % p;
+
+  int n = static_cast<int>(arr.size());
+  int chunk_size = n / p;
+  int remainder = n % p;
 
   auto it = arr.begin();
   for (int i = 0; i < p; i++) {
@@ -100,7 +102,7 @@ void TestTaskSTL::OddEvenMerge(std::vector<BlockRange>& blocks) {
   int max_iters = p * 2;
   int max_block_len = 0;
   for (const auto& b : blocks) {
-    int len = std::distance(b.low, b.high);
+    int len = static_cast<int>(std::distance(b.low, b.high));
     max_block_len = std::max(max_block_len, len);
   }
   int buffer_size = max_block_len * 2;
@@ -111,7 +113,9 @@ void TestTaskSTL::OddEvenMerge(std::vector<BlockRange>& blocks) {
     for (int i = iter % 2; i + 1 < p; i += 2) {
       threads.emplace_back([&, i]() {
         bool changed_local = InPlaceMerge(blocks[i], blocks[i + 1], buffers[i / 2]);
-        if (changed_local) changed_global.store(true, std::memory_order_relaxed);
+        if (changed_local) {
+          changed_global.store(true, std::memory_order_relaxed);
+        }
       });
     }
     for (auto& thread : threads) {
@@ -140,11 +144,12 @@ bool TestTaskSTL::RunImpl() {
   if (n <= 1) {
     return true;
   }
-  int num_threads = std::thread::hardware_concurrency();
+  int num_threads = static_cast<int>(std::thread::hardware_concurrency());
   int p = std::max(num_threads / 2, 1);
   auto blocks = PartitionBlocks(input_, p);
 
   std::vector<std::thread> threads;
+  threads.reserve(p);
   for (int i = 0; i < p; i++) {
     threads.emplace_back([&, i] { QuickSort(blocks[i].low, blocks[i].high, 0); });
   }
