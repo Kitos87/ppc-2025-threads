@@ -25,7 +25,8 @@ void TestTaskSTL::QuickSort(std::vector<int>::iterator low, std::vector<int>::it
     return;
   }
 
-  int random_index = GetRandomIndex(0, std::distance(low, high) - 1);
+  int n = static_cast<int>(std::distance(low, high));
+  int random_index = GetRandomIndex(0, n - 1);
   int pivot = *(low + random_index);
 
   auto partition_iter = std::partition(low, high, [pivot](int elem) { return elem <= pivot; });
