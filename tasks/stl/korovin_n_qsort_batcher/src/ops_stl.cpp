@@ -36,9 +36,8 @@ void TestTaskSTL::QuickSort(std::vector<int>::iterator low, std::vector<int>::it
 
   if (depth < max_depth) {
     std::thread left(QuickSort, low, mid_iter, depth + 1);
-    std::thread right(QuickSort, partition_iter, high, depth + 1);
+    QuickSort(partition_iter, high, depth + 1);
     left.join();
-    right.join();
   } else {
     QuickSort(low, mid_iter, depth + 1);
     QuickSort(partition_iter, high, depth + 1);
