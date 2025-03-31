@@ -32,12 +32,21 @@ void TestTaskSTL::QuickSort(std::vector<int>::iterator low, std::vector<int>::it
   auto partition_iter = std::partition(low, high, [pivot](int elem) { return elem <= pivot; });
   auto mid_iter = std::partition(low, partition_iter, [pivot](int elem) { return elem < pivot; });
 
-  int max_depth = static_cast<int>(std::log2(ppc::util::GetPPCNumThreads())) + 1;
+  int max_threads = ppc::util::GetPPCNumThreads();
 
-  if (depth < max_depth) {
-    std::thread left(QuickSort, low, mid_iter, depth + 1);
+  int expected = thread_count_.load();
+  bool can_spawn = false;
+  while (expected < max_threads && !(can_spawn = thread_count_.compare_exchange_weak(expected, expected + 1))) {
+  }
+
+  if (can_spawn) {
+    std::thread th([low, mid_iter, depth]() {
+      QuickSort(low, mid_iter, depth + 1);
+      thread_count_--;
+    });
+
     QuickSort(partition_iter, high, depth + 1);
-    left.join();
+    th.join();
   } else {
     QuickSort(low, mid_iter, depth + 1);
     QuickSort(partition_iter, high, depth + 1);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <utility>
 #include <vector>
 
@@ -23,6 +24,7 @@ class TestTaskSTL : public ppc::core::Task {
 
  private:
   std::vector<int> input_;
+  static inline std::atomic<int> thread_count_{0};
   static int GetRandomIndex(int low, int high);
   static void QuickSort(std::vector<int>::iterator low, std::vector<int>::iterator high, int depth = 0);
   static bool InPlaceMerge(const BlockRange& a, const BlockRange& b, std::vector<int>& buffer);
