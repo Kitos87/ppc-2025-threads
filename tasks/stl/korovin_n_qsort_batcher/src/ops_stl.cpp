@@ -21,11 +21,9 @@ int TestTaskSTL::GetRandomIndex(int low, int high) {
 }
 
 void TestTaskSTL::QuickSort(std::vector<int>::iterator low, std::vector<int>::iterator high, int depth) {
-  if (std::distance(low, high) <= 1) {
-    return;
-  }
-
   int n = static_cast<int>(std::distance(low, high));
+  if (n <= 1) return;
+
   int random_index = GetRandomIndex(0, n - 1);
   int pivot = *(low + random_index);
 
@@ -34,15 +32,21 @@ void TestTaskSTL::QuickSort(std::vector<int>::iterator low, std::vector<int>::it
 
   int max_threads = ppc::util::GetPPCNumThreads();
 
-  int expected = thread_count_.load();
-  bool can_spawn = false;
-  while (expected < max_threads && !(can_spawn = thread_count_.compare_exchange_weak(expected, expected + 1))) {
+  // Проверяем атомарно, стоит ли создавать новый поток
+  int current_threads = thread_count_.load(std::memory_order_relaxed);
+  bool spawn_thread = false;
+
+  while (current_threads < max_threads) {
+    if (thread_count_.compare_exchange_weak(current_threads, current_threads + 1, std::memory_order_acquire)) {
+      spawn_thread = true;
+      break;
+    }
   }
 
-  if (can_spawn) {
+  if (spawn_thread) {
     std::thread th([low, mid_iter, depth]() {
       QuickSort(low, mid_iter, depth + 1);
-      thread_count_--;
+      thread_count_.fetch_sub(1, std::memory_order_release);
     });
 
     QuickSort(partition_iter, high, depth + 1);
