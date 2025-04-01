@@ -122,21 +122,30 @@ void TestTaskSTL::OddEvenMerge(std::vector<BlockRange>& blocks) {
   }
   int buffer_size = max_block_len * 2;
   std::vector<std::vector<int>> buffers(p / 2, std::vector<int>(buffer_size));
+
   for (int iter = 0; iter < max_iters; iter++) {
-    std::atomic<bool> changed_global(false);
+    bool changed_global = false;
+    std::vector<bool> changed_local_vec((p + 1) / 2, false);
     std::vector<std::thread> threads;
+    threads.reserve(p / 2);
     for (int i = iter % 2; i + 1 < p; i += 2) {
-      threads.emplace_back([&, i]() {
-        bool changed_local = InPlaceMerge(blocks[i], blocks[i + 1], buffers[i / 2]);
-        if (changed_local) {
-          changed_global.store(true, std::memory_order_relaxed);
-        }
+      int pair_idx = i / 2;
+
+      threads.emplace_back([&, i, pair_idx]() {
+        bool changed_local = InPlaceMerge(blocks[i], blocks[i + 1], buffers[pair_idx]);
+        changed_local_vec[pair_idx] = changed_local;
       });
     }
     for (auto& thread : threads) {
       thread.join();
     }
-    if (!changed_global.load()) {
+    for (bool c : changed_local_vec) {
+      if (c) {
+        changed_global = true;
+        break;
+      }
+    }
+    if (!changed_global) {
       break;
     }
   }
