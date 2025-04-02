@@ -10,8 +10,6 @@
 #include <thread>
 #include <vector>
 
-#include "core/util/include/util.hpp"
-
 namespace korovin_n_qsort_batcher_stl {
 
 int TestTaskSTL::GetRandomIndex(int low, int high) {
@@ -29,14 +27,15 @@ void TestTaskSTL::QuickSort(std::vector<int>::iterator low, std::vector<int>::it
     auto partition_iter = std::partition(low, high, [pivot](int elem) { return elem <= pivot; });
     auto mid_iter = std::partition(low, partition_iter, [pivot](int elem) { return elem < pivot; });
 
-    int max_depth = static_cast<int>(std::log2(ppc::util::GetPPCNumThreads())) + 1;
+    int max_depth = static_cast<int>(std::log2(std::thread::hardware_concurrency())) + 1;
 
     if (depth < max_depth) {
       int left_size = static_cast<int>(std::distance(low, mid_iter));
       int right_size = static_cast<int>(std::distance(partition_iter, high));
+      // Запускаем поток только для меньшей части
       if (left_size < right_size) {
         std::thread left(QuickSort, low, mid_iter, depth + 1);
-        low = partition_iter;
+        low = partition_iter;  // продолжаем сортировку правой части в текущем потоке
         depth++;
         left.join();
       } else {
@@ -118,31 +117,21 @@ void TestTaskSTL::OddEvenMerge(std::vector<BlockRange>& blocks) {
   }
   int buffer_size = max_block_len * 2;
   std::vector<std::vector<int>> buffers(p / 2, std::vector<int>(buffer_size));
-  std::vector<std::thread> threads;
-  threads.reserve(p / 2);
-  std::vector<bool> changed_local_vec((p + 1) / 2);
-
   for (int iter = 0; iter < max_iters; iter++) {
-    bool changed_global = false;
-    std::fill(changed_local_vec.begin(), changed_local_vec.end(), false);
-    threads.clear();
+    std::atomic<bool> changed_global(false);
+    std::vector<std::thread> threads;
     for (int i = iter % 2; i + 1 < p; i += 2) {
-      int pair_idx = i / 2;
-      threads.emplace_back([&, i, pair_idx]() {
-        bool changed_local = InPlaceMerge(blocks[i], blocks[i + 1], buffers[pair_idx]);
-        changed_local_vec[pair_idx] = changed_local;
+      threads.emplace_back([&, i]() {
+        bool changed_local = InPlaceMerge(blocks[i], blocks[i + 1], buffers[i / 2]);
+        if (changed_local) {
+          changed_global.store(true, std::memory_order_relaxed);
+        }
       });
     }
     for (auto& thread : threads) {
       thread.join();
     }
-    for (bool c : changed_local_vec) {
-      if (c) {
-        changed_global = true;
-        break;
-      }
-    }
-    if (!changed_global) {
+    if (!changed_global.load()) {
       break;
     }
   }
@@ -165,7 +154,7 @@ bool TestTaskSTL::RunImpl() {
   if (n <= 1) {
     return true;
   }
-  int num_threads = ppc::util::GetPPCNumThreads();
+  int num_threads = static_cast<int>(std::thread::hardware_concurrency());
   int p = std::max(num_threads / 2, 1);
   auto blocks = PartitionBlocks(input_, p);
 
