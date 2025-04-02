@@ -21,36 +21,35 @@ int TestTaskSTL::GetRandomIndex(int low, int high) {
 }
 
 void TestTaskSTL::QuickSort(std::vector<int>::iterator low, std::vector<int>::iterator high, int depth) {
-  int n = static_cast<int>(std::distance(low, high));
-  if (n <= 1) {
-    return;
-  }
+  while (std::distance(low, high) > 1) {
+    int n = static_cast<int>(std::distance(low, high));
+    int random_index = GetRandomIndex(0, n - 1);
+    int pivot = *(low + random_index);
 
-  int random_index = GetRandomIndex(0, n - 1);
-  int pivot = *(low + random_index);
+    auto partition_iter = std::partition(low, high, [pivot](int elem) { return elem <= pivot; });
+    auto mid_iter = std::partition(low, partition_iter, [pivot](int elem) { return elem < pivot; });
 
-  auto partition_iter = std::partition(low, high, [pivot](int elem) { return elem <= pivot; });
-  auto mid_iter = std::partition(low, partition_iter, [pivot](int elem) { return elem < pivot; });
+    int max_depth = static_cast<int>(std::log2(ppc::util::GetPPCNumThreads())) + 1;
 
-  int max_threads = ppc::util::GetPPCNumThreads();
-
-  int current_threads = thread_count_.load(std::memory_order_relaxed);
-  bool spawn_thread = false;
-  if (current_threads < max_threads &&
-      thread_count_.compare_exchange_weak(current_threads, current_threads + 1, std::memory_order_relaxed)) {
-    spawn_thread = true;
-  }
-
-  if (spawn_thread) {
-    std::thread th([low, mid_iter]() {
-      QuickSort(low, mid_iter, 0);
-      thread_count_.fetch_sub(1, std::memory_order_relaxed);
-    });
-    QuickSort(partition_iter, high, 0);
-    th.join();
-  } else {
-    QuickSort(low, mid_iter, 0);
-    QuickSort(partition_iter, high, 0);
+    if (depth < max_depth) {
+      int left_size = static_cast<int>(std::distance(low, mid_iter));
+      int right_size = static_cast<int>(std::distance(partition_iter, high));
+      if (left_size < right_size) {
+        std::thread left(QuickSort, low, mid_iter, depth + 1);
+        low = partition_iter;
+        depth++;
+        left.join();
+      } else {
+        std::thread right(QuickSort, partition_iter, high, depth + 1);
+        high = mid_iter;
+        depth++;
+        right.join();
+      }
+    } else {
+      QuickSort(low, mid_iter, depth + 1);
+      QuickSort(partition_iter, high, depth + 1);
+      break;
+    }
   }
 }
 
