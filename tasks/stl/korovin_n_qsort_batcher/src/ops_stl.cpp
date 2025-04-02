@@ -10,6 +10,8 @@
 #include <thread>
 #include <vector>
 
+#include "core/util/include/util.hpp"
+
 namespace korovin_n_qsort_batcher_stl {
 
 int TestTaskSTL::GetRandomIndex(int low, int high) {
@@ -27,7 +29,7 @@ void TestTaskSTL::QuickSort(std::vector<int>::iterator low, std::vector<int>::it
     auto partition_iter = std::partition(low, high, [pivot](int elem) { return elem <= pivot; });
     auto mid_iter = std::partition(low, partition_iter, [pivot](int elem) { return elem < pivot; });
 
-    int max_depth = static_cast<int>(std::log2(std::thread::hardware_concurrency())) + 1;
+    int max_depth = static_cast<int>(std::log2(ppc::util::GetPPCNumThreads())) + 1;
 
     if (depth < max_depth) {
       int left_size = static_cast<int>(std::distance(low, mid_iter));
@@ -154,7 +156,7 @@ bool TestTaskSTL::RunImpl() {
   if (n <= 1) {
     return true;
   }
-  int num_threads = static_cast<int>(std::thread::hardware_concurrency());
+  int num_threads = static_cast<int>(ppc::util::GetPPCNumThreads());
   int p = std::max(num_threads / 2, 1);
   auto blocks = PartitionBlocks(input_, p);
 
