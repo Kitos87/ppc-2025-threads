@@ -133,16 +133,23 @@ bool TestTaskSTL::ValidationImpl() {
 }
 
 bool TestTaskSTL::RunImpl() {
-  int n = input_.size();
+  int n = (int)input_.size();
   if (n <= 1) return true;
 
+  const int GRAIN_SIZE = 2000;
+  int p_auto = (int)std::ceil((double)n / GRAIN_SIZE);
+
   int num_threads = ppc::util::GetPPCNumThreads();
-  int p = std::min(std::max(num_threads / 2, 1), 2);
+  int p = std::min(p_auto, num_threads);
+
+  if (p < 1) p = 1;
+
   auto blocks = PartitionBlocks(input_, p);
 
   std::vector<std::thread> threads;
+  threads.reserve(p);
   for (int i = 0; i < p; i++) {
-    threads.emplace_back([&, i] { QuickSort(blocks[i].low, blocks[i].high, 0); });
+    threads.emplace_back([&, i]() { QuickSort(blocks[i].low, blocks[i].high, 0); });
   }
   for (auto& thread : threads) {
     thread.join();
