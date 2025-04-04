@@ -147,7 +147,7 @@ bool TestTaskSTL::RunImpl() {
     return true;
   }
   int num_threads = static_cast<int>(ppc::util::GetPPCNumThreads());
-  int p = std::max(num_threads / 2, 1);
+  int p = std::min(static_cast<int>(input_.size()), std::max(num_threads / 2, 1));
   auto blocks = PartitionBlocks(input_, p);
 
   std::vector<std::thread> threads;
