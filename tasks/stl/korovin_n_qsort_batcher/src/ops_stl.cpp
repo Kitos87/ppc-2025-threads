@@ -101,29 +101,47 @@ void TestTaskSTL::OddEvenMerge(std::vector<BlockRange>& blocks) {
   }
 
   int p = static_cast<int>(blocks.size());
-  int max_iters = p * 2;
+  // Для гарантированной перестановки используем 2 * p итераций
+  int max_iters = 2 * p;
+
+  // Вычисляем максимальный размер блока, чтобы понять, какой буфер нужен
   int max_block_len = 0;
   for (const auto& b : blocks) {
     int len = static_cast<int>(std::distance(b.low, b.high));
     max_block_len = std::max(max_block_len, len);
   }
   int buffer_size = max_block_len * 2;
+
+  // Для каждой пары блоков свой буфер
   std::vector<std::vector<int>> buffers(p / 2, std::vector<int>(buffer_size));
+
+  // Один раз создаём вектор потоков размером p/2, переиспользуем
+  std::vector<std::thread> threads(p / 2);
+
   for (int iter = 0; iter < max_iters; iter++) {
+    // Флаг, указывающий, был ли хоть один "обмен" в процессе слияния
     std::atomic<bool> changed_global(false);
-    std::vector<std::thread> threads;
+
+    // Для чередования "odd" и "even" пар используем (iter % 2)
+    // Cколько фактически пар в данном проходе?
+    int pairs_count = 0;
     for (int i = iter % 2; i + 1 < p; i += 2) {
-      threads.emplace_back([&, i]() {
+      // Передаём задачу в поток
+      threads[pairs_count++] = std::thread([&, i]() {
         bool changed_local = InPlaceMerge(blocks[i], blocks[i + 1], buffers[i / 2]);
         if (changed_local) {
           changed_global.store(true, std::memory_order_relaxed);
         }
       });
     }
-    for (auto& thread : threads) {
-      thread.join();
+
+    // Дожидаемся завершения всех работающих потоков
+    for (int i = 0; i < pairs_count; i++) {
+      threads[i].join();
     }
-    if (!changed_global.load()) {
+
+    // Если не было ни одного изменения, значит всё уже отсортировано
+    if (!changed_global.load(std::memory_order_relaxed)) {
       break;
     }
   }
