@@ -20,17 +20,18 @@ int TestTaskSTL::GetRandomIndex(int low, int high) {
 }
 
 void TestTaskSTL::QuickSort(std::vector<int>::iterator low, std::vector<int>::iterator high, int depth) {
-  if (std::distance(low, high) <= 1) {
+  const int size = std::distance(low, high);
+  if (size <= 1) {
     return;
   }
 
-  int random_index = GetRandomIndex(0, std::distance(low, high) - 1);
+  int random_index = GetRandomIndex(0, size - 1);
   int pivot = *(low + random_index);
 
   auto partition_iter = std::partition(low, high, [pivot](int elem) { return elem <= pivot; });
   auto mid_iter = std::partition(low, partition_iter, [pivot](int elem) { return elem < pivot; });
 
-  int max_depth = static_cast<int>(std::log2(ppc::util::GetPPCNumThreads())) + 1;
+  const int max_depth = static_cast<int>(std::log2(ppc::util::GetPPCNumThreads())) + 1;
 
   if (depth < max_depth) {
     std::thread left(QuickSort, low, mid_iter, depth + 1);
@@ -43,7 +44,7 @@ void TestTaskSTL::QuickSort(std::vector<int>::iterator low, std::vector<int>::it
   }
 }
 
-bool TestTaskSTL::InPlaceMerge(const BlockRange& a, const BlockRange& b, std::vector<int>& buffer) {
+bool TestTaskSTL::InPlaceMerge(const BlockRange &a, const BlockRange &b, std::vector<int> &buffer) {
   bool changed = false;
 
   std::span<int> span_a(a.low, a.high);
@@ -71,87 +72,91 @@ bool TestTaskSTL::InPlaceMerge(const BlockRange& a, const BlockRange& b, std::ve
   return changed;
 }
 
-std::vector<BlockRange> TestTaskSTL::PartitionBlocks(std::vector<int>& arr, int p) {
+std::vector<BlockRange> TestTaskSTL::PartitionBlocks(std::vector<int> &arr, int p) {
   std::vector<BlockRange> blocks;
   blocks.reserve(p);
-  int chunk_size = arr.size() / p;
-  int remainder = arr.size() % p;
+  const int chunk_size = arr.size() / p;
+  const int remainder = arr.size() % p;
 
   auto it = arr.begin();
   for (int i = 0; i < p; i++) {
-    int size = chunk_size + (i < remainder ? 1 : 0);
-    blocks.push_back({it, it + size});
+    const int size = chunk_size + (i < remainder ? 1 : 0);
+    blocks.emplace_back(BlockRange{it, it + size});
     it += size;
   }
   return blocks;
 }
 
-void TestTaskSTL::OddEvenMerge(std::vector<BlockRange>& blocks) {
-  if (blocks.size() <= 1) return;
-
-  int p = blocks.size();
-  int max_iters = p * 2;
+void TestTaskSTL::OddEvenMerge(std::vector<BlockRange> &blocks) {
+  const int p = blocks.size();
+  if (p <= 1) return;
 
   int max_block_len = 0;
-  for (const auto& b : blocks) {
-    int len = std::distance(b.low, b.high);
+  for (const auto &b : blocks) {
+    const int len = std::distance(b.low, b.high);
     max_block_len = std::max(max_block_len, len);
   }
-  int buffer_size = max_block_len * 2;
+  const int buffer_size = max_block_len * 2;
 
-  std::vector<std::vector<int>> buffers(p / 2, std::vector<int>(buffer_size));
+  const int max_depth = static_cast<int>(std::log2(p)) + 1;
+  std::vector<std::vector<int>> buffers((p + 1) / 2, std::vector<int>(buffer_size));
 
-  for (int iter = 0; iter < max_iters; iter++) {
+  for (int k = 0; k < max_depth; ++k) {
+    const int d = 1 << k;  // 2^k
+
     std::atomic<bool> changed_global(false);
     std::vector<std::thread> threads;
 
-    for (int i = iter % 2; i + 1 < p; i += 2) {
-      threads.emplace_back([&, i]() {
-        bool changed_local = InPlaceMerge(blocks[i], blocks[i + 1], buffers[i / 2]);
-        if (changed_local) changed_global.store(true, std::memory_order_relaxed);
+    for (int i = 0; i < p; i += 2 * d) {
+      const int j = i + d;
+      if (j >= p) break;
+
+      threads.emplace_back([&, i, j]() {
+        const int buffer_idx = i / (2 * d);
+        bool changed = InPlaceMerge(blocks[i], blocks[j], buffers[buffer_idx]);
+        if (changed) changed_global.store(true, std::memory_order_relaxed);
       });
     }
-    for (auto& thread : threads) {
+
+    for (auto &thread : threads) {
       thread.join();
     }
-    if (!changed_global.load()) {
+
+    if (!changed_global.load(std::memory_order_relaxed)) {
       break;
     }
   }
 }
 
 bool TestTaskSTL::PreProcessingImpl() {
-  unsigned int input_size = task_data->inputs_count[0];
-  auto* in_ptr = reinterpret_cast<int*>(task_data->inputs[0]);
+  const unsigned int input_size = task_data->inputs_count[0];
+  auto *in_ptr = reinterpret_cast<int *>(task_data->inputs[0]);
   input_.assign(in_ptr, in_ptr + input_size);
   return true;
 }
 
 bool TestTaskSTL::ValidationImpl() {
-  return (!task_data->inputs.empty()) && (!task_data->outputs.empty()) &&
-         (task_data->inputs_count[0] == task_data->outputs_count[0]);
+  return !task_data->inputs.empty() && !task_data->outputs.empty() &&
+         task_data->inputs_count[0] == task_data->outputs_count[0];
 }
 
 bool TestTaskSTL::RunImpl() {
-  int n = (int)input_.size();
+  const int n = static_cast<int>(input_.size());
   if (n <= 1) return true;
 
-  const int GRAIN_SIZE = 2000;
-  int p_auto = (int)std::ceil((double)n / GRAIN_SIZE);
-
-  int num_threads = ppc::util::GetPPCNumThreads();
-  int p = std::min(p_auto, num_threads);
-
-  if (p < 1) p = 1;
+  const int GRAIN_SIZE = 500;  // Adjusted for better parallelism on small data
+  const int p_auto = static_cast<int>(std::ceil(n / static_cast<double>(GRAIN_SIZE)));
+  const int num_threads = ppc::util::GetPPCNumThreads();
+  const int p = std::min(p_auto, num_threads);
 
   auto blocks = PartitionBlocks(input_, p);
 
   std::vector<std::thread> threads;
   threads.reserve(p);
-  for (int i = 0; i < p; i++) {
-    threads.emplace_back([&, i]() { QuickSort(blocks[i].low, blocks[i].high, 0); });
+  for (int i = 0; i < p; ++i) {
+    threads.emplace_back([&blocks, i]() { QuickSort(blocks[i].low, blocks[i].high, 0); });
   }
-  for (auto& thread : threads) {
+  for (auto &thread : threads) {
     thread.join();
   }
 
@@ -160,7 +165,7 @@ bool TestTaskSTL::RunImpl() {
 }
 
 bool TestTaskSTL::PostProcessingImpl() {
-  std::copy(input_.begin(), input_.end(), reinterpret_cast<int*>(task_data->outputs[0]));
+  std::copy(input_.begin(), input_.end(), reinterpret_cast<int *>(task_data->outputs[0]));
   return true;
 }
 
