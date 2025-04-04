@@ -14,7 +14,7 @@
 namespace korovin_n_qsort_batcher_stl {
 
 int TestTaskSTL::GetRandomIndex(int low, int high) {
-  thread_local static std::mt19937 gen(std::random_device{}());
+  thread_local static std::mt19937 gen(123456789u);
   std::uniform_int_distribution<int> dist(low, high);
   return dist(gen);
 }
