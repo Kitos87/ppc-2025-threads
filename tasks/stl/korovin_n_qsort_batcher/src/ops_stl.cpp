@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
-#include <cstddef>
 #include <iterator>
 #include <random>
 #include <span>
@@ -25,8 +24,7 @@ void TestTaskSTL::QuickSort(std::vector<int>::iterator low, std::vector<int>::it
     return;
   }
 
-  int n = static_cast<int>(std::distance(low, high));
-  int random_index = GetRandomIndex(0, n - 1);
+  int random_index = GetRandomIndex(0, std::distance(low, high) - 1);
   int pivot = *(low + random_index);
 
   auto partition_iter = std::partition(low, high, [pivot](int elem) { return elem <= pivot; });
@@ -36,8 +34,9 @@ void TestTaskSTL::QuickSort(std::vector<int>::iterator low, std::vector<int>::it
 
   if (depth < max_depth) {
     std::thread left(QuickSort, low, mid_iter, depth + 1);
-    QuickSort(partition_iter, high, depth + 1);
+    std::thread right(QuickSort, partition_iter, high, depth + 1);
     left.join();
+    right.join();
   } else {
     QuickSort(low, mid_iter, depth + 1);
     QuickSort(partition_iter, high, depth + 1);
@@ -46,15 +45,11 @@ void TestTaskSTL::QuickSort(std::vector<int>::iterator low, std::vector<int>::it
 
 bool TestTaskSTL::InPlaceMerge(const BlockRange& a, const BlockRange& b, std::vector<int>& buffer) {
   bool changed = false;
-  int len_a = static_cast<int>(std::distance(a.low, a.high));
-  int len_b = static_cast<int>(std::distance(b.low, b.high));
 
-  std::span<int> span_a{a.low, static_cast<size_t>(len_a)};
-  std::span<int> span_b{b.low, static_cast<size_t>(len_b)};
+  std::span<int> span_a(a.low, a.high);
+  std::span<int> span_b(b.low, b.high);
 
-  size_t i = 0;
-  size_t j = 0;
-  size_t k = 0;
+  size_t i = 0, j = 0, k = 0;
 
   while (i < span_a.size() && j < span_b.size()) {
     if (span_a[i] <= span_b[j]) {
@@ -64,16 +59,14 @@ bool TestTaskSTL::InPlaceMerge(const BlockRange& a, const BlockRange& b, std::ve
       buffer[k++] = span_b[j++];
     }
   }
-  while (i < span_a.size()) {
-    buffer[k++] = span_a[i++];
-  }
+  while (i < span_a.size()) buffer[k++] = span_a[i++];
   while (j < span_b.size()) {
     changed = true;
     buffer[k++] = span_b[j++];
   }
 
-  std::ranges::copy(buffer.begin(), buffer.begin() + len_a, a.low);
-  std::ranges::copy(buffer.begin() + len_a, buffer.begin() + len_a + len_b, b.low);
+  std::copy(buffer.begin(), buffer.begin() + span_a.size(), a.low);
+  std::copy(buffer.begin() + span_a.size(), buffer.begin() + span_a.size() + span_b.size(), b.low);
 
   return changed;
 }
@@ -81,10 +74,8 @@ bool TestTaskSTL::InPlaceMerge(const BlockRange& a, const BlockRange& b, std::ve
 std::vector<BlockRange> TestTaskSTL::PartitionBlocks(std::vector<int>& arr, int p) {
   std::vector<BlockRange> blocks;
   blocks.reserve(p);
-
-  int n = static_cast<int>(arr.size());
-  int chunk_size = n / p;
-  int remainder = n % p;
+  int chunk_size = arr.size() / p;
+  int remainder = arr.size() % p;
 
   auto it = arr.begin();
   for (int i = 0; i < p; i++) {
@@ -96,52 +87,34 @@ std::vector<BlockRange> TestTaskSTL::PartitionBlocks(std::vector<int>& arr, int 
 }
 
 void TestTaskSTL::OddEvenMerge(std::vector<BlockRange>& blocks) {
-  if (blocks.size() <= 1) {
-    return;
-  }
+  if (blocks.size() <= 1) return;
 
-  int p = static_cast<int>(blocks.size());
-  // Для гарантированной перестановки используем 2 * p итераций
-  int max_iters = 2 * p;
+  int p = blocks.size();
+  int max_iters = p * 2;
 
-  // Вычисляем максимальный размер блока, чтобы понять, какой буфер нужен
   int max_block_len = 0;
   for (const auto& b : blocks) {
-    int len = static_cast<int>(std::distance(b.low, b.high));
+    int len = std::distance(b.low, b.high);
     max_block_len = std::max(max_block_len, len);
   }
   int buffer_size = max_block_len * 2;
 
-  // Для каждой пары блоков свой буфер
   std::vector<std::vector<int>> buffers(p / 2, std::vector<int>(buffer_size));
 
-  // Один раз создаём вектор потоков размером p/2, переиспользуем
-  std::vector<std::thread> threads(p / 2);
-
   for (int iter = 0; iter < max_iters; iter++) {
-    // Флаг, указывающий, был ли хоть один "обмен" в процессе слияния
     std::atomic<bool> changed_global(false);
+    std::vector<std::thread> threads;
 
-    // Для чередования "odd" и "even" пар используем (iter % 2)
-    // Cколько фактически пар в данном проходе?
-    int pairs_count = 0;
     for (int i = iter % 2; i + 1 < p; i += 2) {
-      // Передаём задачу в поток
-      threads[pairs_count++] = std::thread([&, i]() {
+      threads.emplace_back([&, i]() {
         bool changed_local = InPlaceMerge(blocks[i], blocks[i + 1], buffers[i / 2]);
-        if (changed_local) {
-          changed_global.store(true, std::memory_order_relaxed);
-        }
+        if (changed_local) changed_global.store(true, std::memory_order_relaxed);
       });
     }
-
-    // Дожидаемся завершения всех работающих потоков
-    for (int i = 0; i < pairs_count; i++) {
-      threads[i].join();
+    for (auto& thread : threads) {
+      thread.join();
     }
-
-    // Если не было ни одного изменения, значит всё уже отсортировано
-    if (!changed_global.load(std::memory_order_relaxed)) {
+    if (!changed_global.load()) {
       break;
     }
   }
@@ -160,16 +133,14 @@ bool TestTaskSTL::ValidationImpl() {
 }
 
 bool TestTaskSTL::RunImpl() {
-  int n = static_cast<int>(input_.size());
-  if (n <= 1) {
-    return true;
-  }
-  int num_threads = static_cast<int>(ppc::util::GetPPCNumThreads());
-  int p = std::min(static_cast<int>(input_.size()), std::max(num_threads / 2, 1));
+  int n = input_.size();
+  if (n <= 1) return true;
+
+  int num_threads = ppc::util::GetPPCNumThreads();
+  int p = std::min(std::max(num_threads / 2, 1), 2);
   auto blocks = PartitionBlocks(input_, p);
 
   std::vector<std::thread> threads;
-  threads.reserve(p);
   for (int i = 0; i < p; i++) {
     threads.emplace_back([&, i] { QuickSort(blocks[i].low, blocks[i].high, 0); });
   }
@@ -182,7 +153,7 @@ bool TestTaskSTL::RunImpl() {
 }
 
 bool TestTaskSTL::PostProcessingImpl() {
-  std::ranges::copy(input_, reinterpret_cast<int*>(task_data->outputs[0]));
+  std::copy(input_.begin(), input_.end(), reinterpret_cast<int*>(task_data->outputs[0]));
   return true;
 }
 
