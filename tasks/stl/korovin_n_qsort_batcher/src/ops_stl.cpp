@@ -33,7 +33,7 @@ void TestTaskSTL::QuickSort(std::vector<int>::iterator low, std::vector<int>::it
   auto partition_iter = std::partition(low, high, [pivot](int elem) { return elem <= pivot; });
   auto mid_iter = std::partition(low, partition_iter, [pivot](int elem) { return elem < pivot; });
 
-  int max_depth = static_cast<int>(std::log2(std::thread::hardware_concurrency())) + 1;
+  int max_depth = static_cast<int>(std::log2(ppc::util::GetPPCNumThreads())) + 1;
 
   if (depth < max_depth) {
     std::thread t([=] { QuickSort(low, mid_iter, depth + 1); });
@@ -167,7 +167,7 @@ bool TestTaskSTL::RunImpl() {
   if (n <= 1) {
     return true;
   }
-  int num_threads = std::thread::hardware_concurrency();
+  int num_threads = ppc::util::GetPPCNumThreads();
   int p = std::max(num_threads / 2, 1);
   auto blocks = PartitionBlocks(input_, p);
 
