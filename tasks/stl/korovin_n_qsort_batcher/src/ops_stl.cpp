@@ -5,7 +5,6 @@
 #include <cmath>
 #include <cstddef>
 #include <iterator>
-#include <mutex>
 #include <random>
 #include <span>
 #include <thread>
@@ -134,9 +133,7 @@ bool TestTaskSTL::RunImpl() {
     return true;
   }
   int num_threads = ppc::util::GetPPCNumThreads();
-  int max_tasks = std::max(num_threads / 2, 1);
-  int tasks = std::min(max_tasks, std::max(1, (n + 255) / 256));
-
+  int tasks = std::min(num_threads, std::max(1, n / 256));
   auto blocks = PartitionBlocks(input_, tasks);
   std::vector<std::thread> threads;
   threads.reserve(tasks);
