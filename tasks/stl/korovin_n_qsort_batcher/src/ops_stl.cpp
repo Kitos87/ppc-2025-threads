@@ -134,11 +134,13 @@ bool TestTaskSTL::RunImpl() {
     return true;
   }
   int num_threads = ppc::util::GetPPCNumThreads();
-  int p = std::max(num_threads / 2, 1);
-  auto blocks = PartitionBlocks(input_, p);
+  int max_tasks = std::max(num_threads / 2, 1);
+  int tasks = std::min(max_tasks, std::max(1, (n + 255) / 256));
+
+  auto blocks = PartitionBlocks(input_, tasks);
   std::vector<std::thread> threads;
-  threads.reserve(p);
-  for (int i = 0; i < p; i++) {
+  threads.reserve(tasks);
+  for (int i = 0; i < tasks; i++) {
     threads.emplace_back([i, &blocks]() { QuickSort(blocks[i].low, blocks[i].high, 0); });
   }
   for (auto& t : threads) {
