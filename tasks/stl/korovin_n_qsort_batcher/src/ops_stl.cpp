@@ -1,6 +1,7 @@
 #include "stl/korovin_n_qsort_batcher/include/ops_stl.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <iterator>
