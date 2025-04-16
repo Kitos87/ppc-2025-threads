@@ -1,18 +1,36 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <numeric>
+#include <random>
 #include <vector>
 
 #include "core/perf/include/perf.hpp"
 #include "core/task/include/task.hpp"
 #include "seq/korovin_n_qsort_batcher/include/ops_seq.hpp"
 
+namespace {
+constexpr int kSize = 250000;
+constexpr unsigned int kSeed = 25;
+
+std::vector<int> GenerateRndArray(int size, unsigned int seed) {
+  std::mt19937 gen(seed);
+  std::uniform_int_distribution<int> dist(-1000, 1000);
+
+  std::vector<int> result(size);
+  for (auto &elem : result) {
+    elem = dist(gen);
+  }
+  return result;
+}
+}  // namespace
+
 TEST(korovin_n_qsort_batcher_seq, test_pipeline_run) {
   // Create data
-  constexpr int kSize = 250000;
-  std::vector<int> in(kSize);
+  std::vector<int> in = GenerateRndArray(kSize, kSeed);
   std::vector<int> out(in.size());
 
   for (int i = 0; i < kSize; i++) {
@@ -50,13 +68,8 @@ TEST(korovin_n_qsort_batcher_seq, test_pipeline_run) {
 
 TEST(korovin_n_qsort_batcher_seq, test_task_run) {
   // Create data
-  constexpr int kSize = 250000;
-  std::vector<int> in(kSize);
+  std::vector<int> in = GenerateRndArray(kSize, kSeed);
   std::vector<int> out(in.size());
-
-  for (int i = 0; i < kSize; i++) {
-    in[i] = kSize - i;
-  }
 
   // Create task_data
   auto task_data_seq = std::make_shared<ppc::core::TaskData>();
