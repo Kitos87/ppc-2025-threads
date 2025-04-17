@@ -4,7 +4,6 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
-#include <numeric>
 #include <random>
 #include <vector>
 
@@ -14,9 +13,9 @@
 
 namespace {
 constexpr int kSize = 250000;
-constexpr unsigned int kSeed = 25;
+constexpr int kSeed = 25;
 
-std::vector<int> GenerateRndArray(int size, unsigned int seed) {
+std::vector<int> GenerateRndArray(int size, int seed) {
   std::mt19937 gen(seed);
   std::uniform_int_distribution<int> dist(-1000, 1000);
 
