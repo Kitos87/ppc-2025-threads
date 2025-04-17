@@ -12,7 +12,7 @@
 #include "omp/korovin_n_qsort_batcher/include/ops_omp.hpp"
 
 namespace {
-constexpr int kSize = 1500000;
+constexpr int kSize = 5000000;
 constexpr int kSeed = 25;
 
 std::vector<int> GenerateRndArray(int size, int seed) {
